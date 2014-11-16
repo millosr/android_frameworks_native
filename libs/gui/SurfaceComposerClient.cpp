@@ -685,13 +685,15 @@ status_t SurfaceComposerClient::getAnimationFrameStats(FrameStats* outStats) {
 #ifdef LEGACY_BLOB_COMPATIBLE
 ssize_t SurfaceComposerClient::getDisplayWidth(int32_t displayId) {
     DisplayInfo info;
-    getDisplayInfo(getBuiltInDisplay(displayId), &info);
+    if (getDisplayInfo(getBuiltInDisplay(displayId), &info) != NO_ERROR)
+        return 0;
     return info.w;
 }
 
 ssize_t SurfaceComposerClient::getDisplayHeight(int32_t displayId) {
     DisplayInfo info;
-    getDisplayInfo(getBuiltInDisplay(displayId), &info);
+    if (getDisplayInfo(getBuiltInDisplay(displayId), &info) != NO_ERROR)
+        return 0;
     return info.h;
 }
 #endif
