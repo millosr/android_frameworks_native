@@ -32,7 +32,11 @@ LOCAL_SRC_FILES:= 	       \
 	EGL/Loader.cpp 	       \
 #
 
+ifeq ($(GNULINUX_SUPPORT),true)
+LOCAL_SHARED_LIBRARIES += libcutils libutils liblog libGLES_trace libdsyscalls
+else
 LOCAL_SHARED_LIBRARIES += libcutils libutils liblog libGLES_trace
+endif
 LOCAL_MODULE:= libEGL
 LOCAL_LDFLAGS += -Wl,--exclude-libs=ALL
 LOCAL_SHARED_LIBRARIES += libdl
@@ -77,7 +81,11 @@ LOCAL_SRC_FILES:= 		\
 	GLES_CM/gl.cpp.arm 	\
 #
 
+ifeq ($(GNULINUX_SUPPORT),true)
+LOCAL_SHARED_LIBRARIES += libcutils liblog libEGL libdsyscalls
+else
 LOCAL_SHARED_LIBRARIES += libcutils liblog libEGL
+endif
 LOCAL_MODULE:= libGLESv1_CM
 
 LOCAL_SHARED_LIBRARIES += libdl
@@ -101,7 +109,11 @@ LOCAL_SRC_FILES:= 		\
 	GLES2/gl2.cpp.arm 	\
 #
 
+ifeq ($(GNULINUX_SUPPORT),true)
+LOCAL_SHARED_LIBRARIES += libcutils libutils liblog libEGL libdsyscalls
+else
 LOCAL_SHARED_LIBRARIES += libcutils libutils liblog libEGL
+endif
 LOCAL_MODULE:= libGLESv2
 
 LOCAL_SHARED_LIBRARIES += libdl

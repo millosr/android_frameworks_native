@@ -359,7 +359,11 @@ void gl_noop() {
 // ----------------------------------------------------------------------------
 
 void setGlThreadSpecific(gl_hooks_t const *value) {
+#ifdef GNULINUX_SUPPORT
+    gl_hooks_t const * volatile * tls_hooks = __get_tls_hooks();
+#else
     gl_hooks_t const * volatile * tls_hooks = get_tls_hooks();
+#endif
     tls_hooks[TLS_SLOT_OPENGL_API] = value;
 }
 
