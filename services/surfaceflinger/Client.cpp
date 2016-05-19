@@ -93,7 +93,12 @@ status_t Client::onTransact(
      const int pid = ipc->getCallingPid();
      const int uid = ipc->getCallingUid();
      const int self_pid = getpid();
+#ifdef GNULINUX_SUPPORT
+     /* All users >= AID_USER will have permission to connect on SurfaceFlinger by default */
+     if (CC_UNLIKELY(pid != self_pid && uid != AID_GRAPHICS && uid != 0 && uid < AID_USER)) {
+#else
      if (CC_UNLIKELY(pid != self_pid && uid != AID_GRAPHICS && uid != 0)) {
+#endif
          // we're called from a different process, do the real check
          if (!PermissionCache::checkCallingPermission(sAccessSurfaceFlinger))
          {

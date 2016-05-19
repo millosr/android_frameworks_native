@@ -481,7 +481,11 @@ int32_t SurfaceFlinger::allocateHwcDisplayId(DisplayDevice::DisplayType type) {
 void SurfaceFlinger::startBootAnim() {
     // start boot animation
     property_set("service.bootanim.exit", "0");
+#ifdef GNULINUX_SUPPORT
+    /* We use our own bootanim from GNU/Linux environment */
+#else
     property_set("ctl.start", "bootanim");
+#endif
 }
 
 size_t SurfaceFlinger::getMaxTextureSize() const {
@@ -2743,8 +2747,14 @@ status_t SurfaceFlinger::onTransact(
             IPCThreadState* ipc = IPCThreadState::self();
             const int pid = ipc->getCallingPid();
             const int uid = ipc->getCallingUid();
+#ifdef GNULINUX_SUPPORT
+            /* All users >= AID_USER will have permission to connect on SurfaceFlinger by default */
+            if ((uid != AID_GRAPHICS) && (uid < AID_USER) &&
+                    !PermissionCache::checkPermission(sAccessSurfaceFlinger, pid, uid)) {
+#else
             if ((uid != AID_GRAPHICS) &&
                     !PermissionCache::checkPermission(sAccessSurfaceFlinger, pid, uid)) {
+#endif
                 ALOGE("Permission Denial: "
                         "can't access SurfaceFlinger pid=%d, uid=%d", pid, uid);
                 return PERMISSION_DENIED;
