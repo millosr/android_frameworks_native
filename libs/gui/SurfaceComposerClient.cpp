@@ -682,6 +682,22 @@ status_t SurfaceComposerClient::getAnimationFrameStats(FrameStats* outStats) {
     return ComposerService::getComposerService()->getAnimationFrameStats(outStats);
 }
 
+#ifdef LEGACY_BLOB_COMPATIBLE
+ssize_t SurfaceComposerClient::getDisplayWidth(int32_t displayId) {
+    DisplayInfo info;
+    if (getDisplayInfo(getBuiltInDisplay(displayId), &info) != NO_ERROR)
+        return 0;
+    return info.w;
+}
+
+ssize_t SurfaceComposerClient::getDisplayHeight(int32_t displayId) {
+    DisplayInfo info;
+    if (getDisplayInfo(getBuiltInDisplay(displayId), &info) != NO_ERROR)
+        return 0;
+    return info.h;
+}
+#endif
+
 // ----------------------------------------------------------------------------
 
 status_t ScreenshotClient::capture(
