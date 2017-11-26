@@ -2781,4 +2781,18 @@ void Parcel::Blob::clear() {
     mMutable = false;
 }
 
+#ifdef LEGACY_BLOB_COMPATIBLE
+
+// ---------------------------------------------------------------------------
+
+/* status_t Parcel::writeString16 */
+extern "C" status_t _ZN7android6Parcel13writeString16EPKDsj(const char16_t* str, size_t len);
+
+extern "C" status_t _ZN7android6Parcel13writeString16EPKtj(const char16_t* str, size_t len)
+{
+    return _ZN7android6Parcel13writeString16EPKDsj(str, len);
+}
+
+#endif // LEGACY_BLOB_COMPATIBLE
+
 }; // namespace android

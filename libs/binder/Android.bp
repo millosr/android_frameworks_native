@@ -66,6 +66,9 @@ cc_library {
         binder32bit: {
             cflags: ["-DBINDER_IPC_32BIT=1"],
         },
+        legacy_blob_compatible: {
+            cflags: ["-DLEGACY_BLOB_COMPATIBLE"],
+        },
     },
 
     shared_libs: [
