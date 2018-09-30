@@ -85,6 +85,9 @@ cc_library {
         binder32bit: {
             cflags: ["-DBINDER_IPC_32BIT=1"],
         },
+        legacy_blob_compatible: {
+            srcs: ["Parcel_legacy.cpp"],
+        },
     },
 
     shared_libs: [
