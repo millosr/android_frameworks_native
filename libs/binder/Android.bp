@@ -95,6 +95,7 @@ cc_library {
         "liblog",
         "libcutils",
         "libutils",
+        "libz"
     ],
 
     header_libs: [

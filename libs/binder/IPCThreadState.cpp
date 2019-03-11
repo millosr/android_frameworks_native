@@ -40,6 +40,9 @@
 #include <sys/resource.h>
 #include <unistd.h>
 
+#include <string.h>
+#include <zlib.h>
+
 #if LOG_NDEBUG
 
 #define IF_LOG_TRANSACTIONS() if (false)
@@ -709,11 +712,67 @@ IPCThreadState::~IPCThreadState()
 {
 }
 
+#define MIN_LENGTH_TO_COMPRESS (1 << 18)
+
+#define COMPRESSED "COMPRESSED"
+#define COMPRESSED_LEN sizeof(COMPRESSED)
+
+struct compressedHeader {
+    char signature[COMPRESSED_LEN];
+    size_t dataSize;
+    uLong crc;
+};
+
+#define COMPRESSED_HEADER_LEN sizeof(struct compressedHeader)
+
 status_t IPCThreadState::sendReply(const Parcel& reply, uint32_t flags)
 {
     status_t err;
     status_t statusBuffer;
-    err = writeTransactionData(BC_REPLY, flags, -1, 0, reply, &statusBuffer);
+
+    // if we need to compress
+    Parcel commpresedReply;
+
+    size_t dataSize = reply.ipcDataSize();
+    if (dataSize >= MIN_LENGTH_TO_COMPRESS && reply.ipcObjectsCount() == 0) {
+        size_t buffSize = dataSize / 2;
+        uint8_t* buff = (uint8_t *)malloc(buffSize);
+        uint8_t* data = (uint8_t *)reply.ipcData();
+
+        z_stream defstream;
+        memset(&defstream, 0, sizeof(z_stream));
+
+        defstream.avail_in = (uInt)dataSize;
+        defstream.next_in = (Bytef *)data;
+        defstream.avail_out = (uInt)buffSize;
+        defstream.next_out = (Bytef *)buff;
+
+        deflateInit(&defstream, Z_BEST_COMPRESSION);
+        deflate(&defstream, Z_FINISH);
+        deflateEnd(&defstream);
+
+        size_t compressedSize = defstream.total_out;
+
+        struct compressedHeader header;
+        memcpy(header.signature, COMPRESSED, COMPRESSED_LEN);
+        header.dataSize = dataSize;
+        header.crc = crc32(0, (const Bytef *)data, dataSize);
+
+        size_t parcelDataSize = COMPRESSED_HEADER_LEN + compressedSize;
+        uint8_t* parcelBuff = (uint8_t *)malloc(parcelDataSize);
+        memcpy(parcelBuff, &header, COMPRESSED_HEADER_LEN);
+        memcpy(parcelBuff + COMPRESSED_HEADER_LEN, buff, compressedSize);
+        free(buff);
+
+        ALOGI("BC_REPLY compressed, dataSize: %u, compressed size: %u, crc: %lu",
+                dataSize, compressedSize, header.crc);
+
+        commpresedReply.ipcSetDataReference(parcelBuff, parcelDataSize, NULL, 0, NULL, NULL);
+
+        err = writeTransactionData(BC_REPLY, flags, -1, 0, commpresedReply, &statusBuffer);
+    } else {
+        err = writeTransactionData(BC_REPLY, flags, -1, 0, reply, &statusBuffer);
+    }
     if (err < NO_ERROR) return err;
 
     return waitForResponse(NULL, NULL);
@@ -768,12 +827,55 @@ status_t IPCThreadState::waitForResponse(Parcel *reply, status_t *acquireResult)
 
                 if (reply) {
                     if ((tr.flags & TF_STATUS_CODE) == 0) {
-                        reply->ipcSetDataReference(
-                            reinterpret_cast<const uint8_t*>(tr.data.ptr.buffer),
-                            tr.data_size,
-                            reinterpret_cast<const binder_size_t*>(tr.data.ptr.offsets),
-                            tr.offsets_size/sizeof(binder_size_t),
-                            freeBuffer, this);
+                        if (tr.data_size > COMPRESSED_HEADER_LEN && ((char *)tr.data.ptr.buffer)[0] == 'C'
+                                && memcmp((char *)tr.data.ptr.buffer, COMPRESSED, COMPRESSED_LEN) == 0) {
+
+                            struct compressedHeader header;
+                            memcpy(&header, (void *)tr.data.ptr.buffer, COMPRESSED_HEADER_LEN);
+
+                            size_t dataSize = header.dataSize;
+                            size_t compressedSize = tr.data_size - COMPRESSED_HEADER_LEN;
+
+                            uint8_t* data = (uint8_t *)malloc(dataSize);
+
+                            z_stream infstream;
+                            memset(&infstream, 0, sizeof(z_stream));
+
+                            infstream.avail_in = compressedSize;
+                            infstream.next_in = (Bytef *)tr.data.ptr.buffer + COMPRESSED_HEADER_LEN;
+                            infstream.avail_out = (uInt)dataSize;
+                            infstream.next_out = (Bytef *)data;
+
+                            inflateInit(&infstream);
+                            inflate(&infstream, Z_NO_FLUSH);
+                            inflateEnd(&infstream);
+
+                            uLong crc = crc32(0, (const Bytef *)data, infstream.total_out);
+
+                            ALOGI("decompressReply, dataSize: %lu, compressed size: %u, crc: %lu",
+                                    infstream.total_out, compressedSize, crc);
+
+                            if (dataSize != infstream.total_out || header.crc != crc) {
+                                err = FAILED_TRANSACTION;
+                                ALOGE("Failed to decompress - source (size: %u, crc: %lu), inflated (size: %lu, crc: %lu)",
+                                    dataSize, header.crc, infstream.total_out, crc);
+                            } else {
+                                reply->ipcSetDataReference(data, dataSize, NULL, 0, NULL, NULL);
+                            }
+
+                            freeBuffer(NULL,
+                                    reinterpret_cast<const uint8_t*>(tr.data.ptr.buffer),
+                                    tr.data_size,
+                                    reinterpret_cast<const binder_size_t*>(tr.data.ptr.offsets),
+                                    tr.offsets_size/sizeof(binder_size_t), this);
+                        } else {
+                            reply->ipcSetDataReference(
+                                reinterpret_cast<const uint8_t*>(tr.data.ptr.buffer),
+                                tr.data_size,
+                                reinterpret_cast<const binder_size_t*>(tr.data.ptr.offsets),
+                                tr.offsets_size/sizeof(binder_size_t),
+                                freeBuffer, this);
+                        }
                     } else {
                         err = *reinterpret_cast<const status_t*>(tr.data.ptr.buffer);
                         freeBuffer(NULL,
@@ -1094,6 +1196,12 @@ status_t IPCThreadState::executeCommand(int32_t cmd)
             if ((tr.flags & TF_ONE_WAY) == 0) {
                 LOG_ONEWAY("Sending reply to %d!", mCallingPid);
                 if (error < NO_ERROR) reply.setError(error);
+
+                /*if (reply.ipcDataSize() >= MIN_LENGTH_TO_COMPRESS) {
+                    ALOGI("BR_TRANSACTION tr.data_size: %llu, reply size: %u", tr.data_size, reply.ipcDataSize());
+                    alog << "request data: " << endl << HexDump((const void *)tr.data.ptr.buffer, tr.data_size) << endl;
+                    alog << "response data (0..255): " << endl << HexDump((const void *)reply.ipcData(), 256) << endl;
+                }*/
                 sendReply(reply, 0);
             } else {
                 LOG_ONEWAY("NOT sending reply to %d!", mCallingPid);
