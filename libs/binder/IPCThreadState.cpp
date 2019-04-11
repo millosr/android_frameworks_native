@@ -712,7 +712,7 @@ IPCThreadState::~IPCThreadState()
 {
 }
 
-#define MIN_LENGTH_TO_COMPRESS (1 << 18)
+#define MIN_LENGTH_TO_COMPRESS (1 << 19)
 
 #define COMPRESSED "COMPRESSED"
 #define COMPRESSED_LEN sizeof(COMPRESSED)
@@ -735,7 +735,7 @@ status_t IPCThreadState::sendReply(const Parcel& reply, uint32_t flags)
 
     size_t dataSize = reply.ipcDataSize();
     if (dataSize >= MIN_LENGTH_TO_COMPRESS && reply.ipcObjectsCount() == 0) {
-        size_t buffSize = dataSize / 2;
+        size_t buffSize = dataSize;
         uint8_t* buff = (uint8_t *)malloc(buffSize);
         uint8_t* data = (uint8_t *)reply.ipcData();
 
